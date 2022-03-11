@@ -4,9 +4,10 @@ from torch.nn import functional as F
 from torch import Tensor, nn
 from torchvision.models import resnet18, resnet50
 from utils import linear_warmup_decay
+import math
 
 class Projection(nn.Module):
-    def __init__(self, input_dim=2048, hidden_dim=2048, output_dim=128):
+    def __init__(self, input_dim=128*4, hidden_dim=128*4, output_dim=128):
         super().__init__()
         self.output_dim = output_dim
         self.input_dim = input_dim
@@ -32,7 +33,7 @@ class SimCLR(LightningModule):
         dataset: str,
         num_nodes: int = 1,
         arch: str = "resnet18",
-        hidden_mlp: int = 2048,
+        hidden_mlp: int = 512,
         feat_dim: int = 128,
         warmup_epochs: int = 10,
         max_epochs: int = 100,
@@ -95,12 +96,13 @@ class SimCLR(LightningModule):
             backbone = resnet18
         elif self.arch == "resnet50":
             backbone = resnet50
-
-        return backbone()
+        # print(resnet50())
+        return backbone(num_classes=128*4)
 
     def forward(self, x):
         # bolts resnet returns a list
-        return self.encoder(x)[-1]
+        # print(self.encoder(x).shape)
+        return self.encoder(x)
 
     def shared_step(self, batch):
 

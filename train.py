@@ -3,6 +3,7 @@ import pytorch_lightning as pl
 from lit_module import SimCLR
 from data_module import CelebADataModule
 from utils import SimCLREvalDataTransform, SimCLRTrainDataTransform
+from pytorch_lightning.loggers import WandbLogger
 import torch
 
 batch_size = 256
@@ -15,6 +16,12 @@ dm.val_transforms = SimCLREvalDataTransform(batch_size)
 gpus = 1 if torch.cuda.is_available() else 0
 
 model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.batch_size)
+
+
+# from pytorch_lightning import Trainer
+
+wandb_logger = WandbLogger()
+# trainer = Trainer(logger=wandb_logger)
 
 trainer = pl.Trainer(gpus=gpus)
 trainer.fit(model, dm)
