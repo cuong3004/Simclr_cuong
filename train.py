@@ -20,8 +20,8 @@ model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.
 
 # from pytorch_lightning import Trainer
 
-wandb_logger = WandbLogger()
+wandb_logger = WandbLogger(name="Face", log_model="all", project="Simclr")
 # trainer = Trainer(logger=wandb_logger)
 
-trainer = pl.Trainer(gpus=gpus)
+trainer = pl.Trainer(gpus=gpus, logger=wandb_logger)
 trainer.fit(model, dm)
