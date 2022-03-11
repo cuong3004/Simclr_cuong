@@ -1,4 +1,5 @@
 import gdown
+import os
 
 data_root = 'data/CelebA'
 
