@@ -11,7 +11,7 @@ download_path = f'{data_root}/img_align_celeba.zip'
 
 if not os.path.exists(data_root):
     os.makedirs(data_root)
-    os.makedirs(dataset_folder)
+    # os.makedirs(dataset_folder)
 
 gdown.download(url_celebA, download_path, quiet=False)
 
