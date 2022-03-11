@@ -1,0 +1,3 @@
+pytorch_lightning
+gdown==4.4.0
+wandb
