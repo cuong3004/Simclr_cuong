@@ -4,9 +4,24 @@ from lit_module import SimCLR
 from data_module import CelebADataModule
 from utils import SimCLREvalDataTransform, SimCLRTrainDataTransform
 from pytorch_lightning.loggers import WandbLogger
+from torchvision import transforms
 import torch
 
 batch_size = 256
+input_height = 112
+
+train_transforms = transforms.Compose([
+        transforms.RandomResizedCrop(input_height),
+        transforms.RandAugment(),
+        transforms.ToTensor(),          
+        
+        transforms.Normalize(
+                [0.485, 0.456, 0.406],
+                [0.229, 0.224, 0.225])
+])
+# val_transforms = transforms.Compose([
+
+
 dm = CelebADataModule("data/CelebA/img_align_celeba", num_workers=2)
 dm.train_transforms = SimCLRTrainDataTransform(batch_size)
 dm.val_transforms = SimCLREvalDataTransform(batch_size)

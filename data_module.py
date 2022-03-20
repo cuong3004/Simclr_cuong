@@ -128,8 +128,15 @@ class CelebADataModule(LightningDataModule):  # pragma: no cover
         return loader
 
     def _default_transforms(self) -> Callable:
-        data_transforms = transform_lib.Compose([transform_lib.Resize((224,224)), transform_lib.ToTensor(), transform_lib.Normalize(0.5, 0.5)])
-        return data_transforms
+        data_transforms = transform_lib.Compose([
+                            transform_lib.Resize((112,112)), 
+                            transform_lib.ToTensor(), 
+                            transform_lib.Normalize(
+                                [0.485, 0.456, 0.406],
+                                [0.229, 0.224, 0.225])
+                            ])
+        # return data_transforms
+        return None
 
 
 if __name__ == "__main__":
