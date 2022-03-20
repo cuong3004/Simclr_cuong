@@ -2,6 +2,17 @@ from torchvision import transforms
 import math
 import numpy as np
 import cv2
+import torchvision
+import matplotlib.pyplot as plt
+
+def test_transform(dataloader):
+    plt.figure(figsize=(10,10))
+    x1, _, _ = next(iter(dataloader))
+    x1 = x1[:5*5]
+    grid_img = torchvision.utils.make_grid(x1, nrow=5)
+    plt.imshow(grid_img.permute(1, 2, 0))
+    plt.savefig("test_image.png")
+
 
 # warmup + decay as a function
 def linear_warmup_decay(warmup_steps, total_steps, cosine=True, linear=False):
@@ -25,6 +36,8 @@ def linear_warmup_decay(warmup_steps, total_steps, cosine=True, linear=False):
         return 1.0 - progress
 
     return fn
+
+
 
 
 class SimCLRTrainDataTransform:
@@ -147,3 +160,4 @@ class GaussianBlur:
             sample = cv2.GaussianBlur(sample, (self.kernel_size, self.kernel_size), sigma)
 
         return sample
+

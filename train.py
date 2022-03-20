@@ -2,12 +2,12 @@ import numpy as np
 import pytorch_lightning as pl
 from lit_module import SimCLR
 from data_module import CelebADataModule
-from utils import SimCLREvalDataTransform, SimCLRTrainDataTransform
+from utils import SimCLREvalDataTransform, SimCLRTrainDataTransform, test_transform
 from pytorch_lightning.loggers import WandbLogger
 from torchvision import transforms
 import torch
 
-batch_size = 256
+batch_size = 512
 input_height = 112
 
 data_transforms = transforms.Compose([
@@ -38,6 +38,8 @@ sim_val_transforms.train_transform = sim_transforms
 dm = CelebADataModule("data/CelebA/img_align_celeba", num_workers=2)
 dm.train_transforms = sim_train_transforms
 dm.val_transforms = sim_val_transforms
+
+test_transform(dm.train_dataloader)
 
 # def test_transform(dataset, wandb_logger):
     

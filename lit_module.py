@@ -106,7 +106,7 @@ class SimCLR(LightningModule):
         # print(self.encoder(x).shape)
         return self.encoder(x)
 
-    def shared_step(self, batch):
+    def shared_step(self, batch, mode):
 
         # final image in tuple is for online eval
         (img1, img2, _) = batch
@@ -119,21 +119,21 @@ class SimCLR(LightningModule):
         z1 = self.projection(h1)
         z2 = self.projection(h2)
 
-        loss = self.nt_xent_loss(z1, z2, self.temperature)
+        loss = self.nt_xent_loss(z1, z2, self.temperature, mode)
 
         return loss
 
     def training_step(self, batch, batch_idx):
-        loss = self.shared_step(batch)
+        loss = self.shared_step(batch, mode="train")
 
-        self.log("train_loss", loss, on_step=True, on_epoch=False)
+        # self.log("train_loss", loss, on_step=True, on_epoch=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
         # print(batch)
-        loss = self.shared_step(batch)
+        loss = self.shared_step(batch, mode="val")
 
-        self.log("val_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
+        # self.log("val_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
     def exclude_from_wt_decay(self, named_params, weight_decay, skip_list=("bias", "bn")):
@@ -187,7 +187,7 @@ class SimCLR(LightningModule):
 
         return [optimizer], [scheduler]
 
-    def nt_xent_loss(self, out_1, out_2, temperature, eps=1e-6):
+    def nt_xent_loss(self, out_1, out_2, temperature, mode="train"):
         """
         assume out_1 and out_2 are normalized
         out_1: [batch_size, dim]
@@ -196,32 +196,61 @@ class SimCLR(LightningModule):
         # gather representations in case of distributed training
         # out_1_dist: [batch_size * world_size, dim]
         # out_2_dist: [batch_size * world_size, dim]
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
-            out_1_dist = SyncFunction.apply(out_1)
-            out_2_dist = SyncFunction.apply(out_2)
-        else:
-            out_1_dist = out_1
-            out_2_dist = out_2
 
-        # out: [2 * batch_size, dim]
-        # out_dist: [2 * batch_size * world_size, dim]
-        out = torch.cat([out_1, out_2], dim=0)
-        out_dist = torch.cat([out_1_dist, out_2_dist], dim=0)
+        feats = torch.cat([out_1, out_2], dim=0)
+        # Calculate cosine similarity
+        cos_sim = F.cosine_similarity(feats[:, None, :], feats[None, :, :], dim=-1)
+        # Mask out cosine similarity to itself
+        self_mask = torch.eye(cos_sim.shape[0], dtype=torch.bool, device=cos_sim.device)
+        cos_sim.masked_fill_(self_mask, -9e15)
+        # Find positive example -> batch_size//2 away from the original example
+        pos_mask = self_mask.roll(shifts=cos_sim.shape[0] // 2, dims=0)
+        # InfoNCE loss
+        cos_sim = cos_sim / temperature
+        nll = -cos_sim[pos_mask] + torch.logsumexp(cos_sim, dim=-1)
+        nll = nll.mean()
 
-        # cov and sim: [2 * batch_size, 2 * batch_size * world_size]
-        # neg: [2 * batch_size]
-        cov = torch.mm(out, out_dist.t().contiguous())
-        sim = torch.exp(cov / temperature)
-        neg = sim.sum(dim=-1)
+        # Logging loss
+        self.log(mode + "_loss", nll)
+        # Get ranking position of positive example
+        comb_sim = torch.cat(
+            [cos_sim[pos_mask][:, None], cos_sim.masked_fill(pos_mask, -9e15)],  # First position positive example
+            dim=-1,
+        )
+        sim_argsort = comb_sim.argsort(dim=-1, descending=True).argmin(dim=-1)
+        # Logging ranking metrics
+        self.log(mode + "_acc_top1", (sim_argsort == 0).float().mean())
+        self.log(mode + "_acc_top5", (sim_argsort < 5).float().mean())
+        self.log(mode + "_acc_mean_pos", 1 + sim_argsort.float().mean())
 
-        # from each row, subtract e^(1/temp) to remove similarity measure for x1.x1
-        row_sub = Tensor(neg.shape).fill_(math.e ** (1 / temperature)).to(neg.device)
-        neg = torch.clamp(neg - row_sub, min=eps)  # clamp for numerical stability
+        return nll
 
-        # Positive similarity, pos becomes [2 * batch_size]
-        pos = torch.exp(torch.sum(out_1 * out_2, dim=-1) / temperature)
-        pos = torch.cat([pos, pos], dim=0)
+        # if torch.distributed.is_available() and torch.distributed.is_initialized():
+        #     out_1_dist = SyncFunction.apply(out_1)
+        #     out_2_dist = SyncFunction.apply(out_2)
+        # else:
+        #     out_1_dist = out_1
+        #     out_2_dist = out_2
 
-        loss = -torch.log(pos / (neg + eps)).mean()
+        # # out: [2 * batch_size, dim]
+        # # out_dist: [2 * batch_size * world_size, dim]
+        # out = torch.cat([out_1, out_2], dim=0)
+        # out_dist = torch.cat([out_1_dist, out_2_dist], dim=0)
 
-        return loss
+        # # cov and sim: [2 * batch_size, 2 * batch_size * world_size]
+        # # neg: [2 * batch_size]
+        # cov = torch.mm(out, out_dist.t().contiguous())
+        # sim = torch.exp(cov / temperature)
+        # neg = sim.sum(dim=-1)
+
+        # # from each row, subtract e^(1/temp) to remove similarity measure for x1.x1
+        # row_sub = Tensor(neg.shape).fill_(math.e ** (1 / temperature)).to(neg.device)
+        # neg = torch.clamp(neg - row_sub, min=eps)  # clamp for numerical stability
+
+        # # Positive similarity, pos becomes [2 * batch_size]
+        # pos = torch.exp(torch.sum(out_1 * out_2, dim=-1) / temperature)
+        # pos = torch.cat([pos, pos], dim=0)
+
+        # loss = -torch.log(pos / (neg + eps)).mean()
+
+        # return loss
