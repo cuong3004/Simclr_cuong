@@ -10,21 +10,37 @@ import torch
 batch_size = 256
 input_height = 112
 
-train_transforms = transforms.Compose([
-        transforms.RandomResizedCrop(input_height),
-        transforms.RandAugment(),
+data_transforms = transforms.Compose([
+    transforms.RandomResizedCrop(input_height),
+    transforms.RandAugment(),
+])
+
+final_transforms = transforms.Compose([
         transforms.ToTensor(),          
-        
         transforms.Normalize(
                 [0.485, 0.456, 0.406],
                 [0.229, 0.224, 0.225])
 ])
-# val_transforms = transforms.Compose([
+
+sim_transforms = transforms.Compose([
+        data_transforms,
+        final_transforms
+])
+# val_transforms = transforms.Compose
+sim_train_transforms = SimCLRTrainDataTransform(batch_size)
+sim_val_transforms = SimCLREvalDataTransform(batch_size)
+
+sim_train_transforms.train_transform = sim_transforms
+sim_val_transforms.train_transform = sim_transforms
+
 
 
 dm = CelebADataModule("data/CelebA/img_align_celeba", num_workers=2)
-dm.train_transforms = SimCLRTrainDataTransform(batch_size)
-dm.val_transforms = SimCLREvalDataTransform(batch_size)
+dm.train_transforms = sim_train_transforms
+dm.val_transforms = sim_val_transforms
+
+def test_transform(dataset, wandb_logger):
+    
 
 # print(len(next(iter(dm.train_dataloader()))))
 
