@@ -39,20 +39,20 @@ dm = CelebADataModule("data/CelebA/img_align_celeba", num_workers=2)
 dm.train_transforms = sim_train_transforms
 dm.val_transforms = sim_val_transforms
 
-def test_transform(dataset, wandb_logger):
+# def test_transform(dataset, wandb_logger):
     
 
 # print(len(next(iter(dm.train_dataloader()))))
 
-gpus = 1 if torch.cuda.is_available() else 0
+# gpus = 1 if torch.cuda.is_available() else 0
 
-model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.batch_size)
+# model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.batch_size)
 
 
-# from pytorch_lightning import Trainer
+# # from pytorch_lightning import Trainer
 
-wandb_logger = WandbLogger(name="Face", log_model="all", project="Simclr")
-# trainer = Trainer(logger=wandb_logger)
+# wandb_logger = WandbLogger(name="Face", log_model="all", project="Simclr")
+# # trainer = Trainer(logger=wandb_logger)
 
-trainer = pl.Trainer(gpus=gpus, logger=wandb_logger)
-trainer.fit(model, dm)
+# trainer = pl.Trainer(gpus=gpus, logger=wandb_logger)
+# trainer.fit(model, dm)
