@@ -10,6 +10,7 @@ import torch
 
 batch_size = 512
 input_height = 112
+max_epoch = 50
 
 data_transforms = transforms.Compose([
     transforms.RandomResizedCrop(input_height),
@@ -52,7 +53,7 @@ model = SimCLR.load_from_checkpoint(os.path.join("./artifacts/model-s00ad5y4:v4"
 
 gpus = 1 if torch.cuda.is_available() else 0
 wandb_logger = WandbLogger(name="Face_randaugument_batch_512_t_0.1", log_model="all", project="Simclr", id="s00ad5y4")
-trainer = pl.Trainer(gpus=gpus, logger=wandb_logger, callbacks=[checkpoint_callback], resume_from_checkpoint=os.path.join("./artifacts/model-s00ad5y4:v4", "model.ckpt"))
+trainer = pl.Trainer(gpus=gpus, logger=wandb_logger, callbacks=[checkpoint_callback], resume_from_checkpoint=os.path.join("./artifacts/model-s00ad5y4:v4", "model.ckpt"), max_epochs=max_epoch)
 trainer.fit(model, dm)
 trainer.validate(model, dm)
 # def test_transform(dataset, wandb_logger):
