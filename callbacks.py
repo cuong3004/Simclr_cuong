@@ -27,7 +27,7 @@ checkpoint_callback = ModelCheckpoint(
     filename="model",
     save_top_k=1,
     verbose=False,
-    monitor='valid_loss',
+    monitor='val_los',
     mode='min',    
 )
 
