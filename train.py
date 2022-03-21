@@ -5,6 +5,7 @@ from data_module import CelebADataModule
 from utils import SimCLREvalDataTransform, SimCLRTrainDataTransform, test_transform
 from pytorch_lightning.loggers import WandbLogger
 from torchvision import transforms
+from callbacks import checkpoint_callback
 import torch
 
 batch_size = 512
@@ -41,6 +42,19 @@ dm.val_transforms = sim_val_transforms
 
 test_transform(dm.train_dataloader())
 
+import wandb
+import os
+run = wandb.init()
+artifact = run.use_artifact('duongcuong1977/Simclr/model-s00ad5y4:v4', type='model')
+artifact_dir = artifact.download()
+
+model = SimCLR.load_from_checkpoint(os.path.join("./artifacts/model-s00ad5y4:v4", "model.ckpt"))
+
+gpus = 1 if torch.cuda.is_available() else 0
+wandb_logger = WandbLogger(name="Face_randaugument_batch_512_t_0.1", log_model="all", project="Simclr", id="s00ad5y4")
+trainer = pl.Trainer(gpus=gpus, logger=wandb_logger, callbacks=[checkpoint_callback], resume_from_checkpoint=os.path.join("./artifacts/model-s00ad5y4:v4", "model.ckpt"))
+trainer.fit(model, dm)
+trainer.validate(model, dm)
 # def test_transform(dataset, wandb_logger):
     
 
