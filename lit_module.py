@@ -2,7 +2,7 @@ from pytorch_lightning import LightningModule, Trainer
 import torch 
 from torch.nn import functional as F
 from torch import Tensor, nn
-from torchvision.models import resnet18, resnet50, mobilenetv2
+from torchvision.models import resnet18, resnet50, mobilenet_v2
 from utils import linear_warmup_decay
 import math
 
@@ -32,7 +32,7 @@ class SimCLR(LightningModule):
         batch_size: int,
         dataset: str,
         num_nodes: int = 1,
-        arch: str = "resnet18",
+        arch: str = "mobilenet_v2",
         hidden_mlp: int = 512,
         feat_dim: int = 128,
         warmup_epochs: int = 10,
@@ -96,8 +96,8 @@ class SimCLR(LightningModule):
             backbone = resnet18
         elif self.arch == "resnet50":
             backbone = resnet50
-        elif self.arch == "mobilenetv2":
-            backbone = mobilenetv2
+        elif self.arch == "mobilenet_v2":
+            backbone = mobilenet_v2
         # print(resnet50())
         return backbone(num_classes=128*4)
 

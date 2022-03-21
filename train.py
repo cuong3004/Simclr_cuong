@@ -39,7 +39,7 @@ dm = CelebADataModule("data/CelebA/img_align_celeba", num_workers=2)
 dm.train_transforms = sim_train_transforms
 dm.val_transforms = sim_val_transforms
 
-test_transform(dm.train_dataloader)
+test_transform(dm.train_dataloader())
 
 # def test_transform(dataset, wandb_logger):
     
