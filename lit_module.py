@@ -3,7 +3,8 @@ import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
 from torchvision.models import resnet18, resnet50, mobilenet_v2
-
+from utils import linear_warmup_decay
+import math
 
 class Projection(nn.Module):
     def __init__(self, input_dim=128*4, hidden_dim=128*4, output_dim=128):
@@ -26,7 +27,11 @@ class Projection(nn.Module):
 class SimCLR(LightningModule):
     def __init__(
         self,
-        train_iters_per_epoch: int,
+        gpus: int,
+        num_samples: int,
+        batch_size: int,
+        dataset: str,
+        num_nodes: int = 1,
         arch: str = "mobilenet_v2",
         hidden_mlp: int = 512,
         feat_dim: int = 128,
@@ -55,7 +60,12 @@ class SimCLR(LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
+        self.gpus = gpus
+        self.num_nodes = num_nodes
         self.arch = arch
+        self.dataset = dataset
+        self.num_samples = num_samples
+        self.batch_size = batch_size
 
         self.hidden_mlp = hidden_mlp
         self.feat_dim = feat_dim
@@ -78,7 +88,8 @@ class SimCLR(LightningModule):
         self.projection = Projection(input_dim=self.hidden_mlp, hidden_dim=self.hidden_mlp, output_dim=self.feat_dim)
 
         # compute iters per epoch
-        self.train_iters_per_epoch = train_iters_per_epoch
+        global_batch_size = self.num_nodes * self.gpus * self.batch_size if self.gpus > 0 else self.batch_size
+        self.train_iters_per_epoch = self.num_samples // global_batch_size
 
     def init_model(self):
         if self.arch == "resnet18":
@@ -87,16 +98,18 @@ class SimCLR(LightningModule):
             backbone = resnet50
         elif self.arch == "mobilenet_v2":
             backbone = mobilenet_v2
-
+        # print(resnet50())
         return backbone(num_classes=128*4)
 
     def forward(self, x):
+        # bolts resnet returns a list
+        # print(self.encoder(x).shape)
         return self.encoder(x)
 
     def shared_step(self, batch, mode):
 
         # final image in tuple is for online eval
-        (img1, img2) = batch
+        (img1, img2, _) = batch
 
         # get h representations, bolts resnet returns a list
         h1 = self(img1)
@@ -112,18 +125,77 @@ class SimCLR(LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss = self.shared_step(batch, mode="train")
+
+        # self.log("train_loss", loss, on_step=True, on_epoch=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
+        # print(batch)
         loss = self.shared_step(batch, mode="val")
+
+        # self.log("val_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+    def exclude_from_wt_decay(self, named_params, weight_decay, skip_list=("bias", "bn")):
+        params = []
+        excluded_params = []
 
-        return optimizer
+        for name, param in named_params:
+            if not param.requires_grad:
+                continue
+            elif any(layer_name in name for layer_name in skip_list):
+                excluded_params.append(param)
+            else:
+                params.append(param)
+
+        return [
+            {"params": params, "weight_decay": weight_decay},
+            {
+                "params": excluded_params,
+                "weight_decay": 0.0,
+            },
+        ]
+
+    def configure_optimizers(self):
+        if self.exclude_bn_bias:
+            params = self.exclude_from_wt_decay(self.named_parameters(), weight_decay=self.weight_decay)
+        else:
+            params = self.parameters()
+
+        if self.optim == "lars":
+            optimizer = LARS(
+                params,
+                lr=self.learning_rate,
+                momentum=0.9,
+                weight_decay=self.weight_decay,
+                trust_coefficient=0.001,
+            )
+        elif self.optim == "adam":
+            optimizer = torch.optim.Adam(params, lr=self.learning_rate, weight_decay=self.weight_decay)
+
+        warmup_steps = self.train_iters_per_epoch * self.warmup_epochs
+        total_steps = self.train_iters_per_epoch * self.max_epochs
+
+        scheduler = {
+            "scheduler": torch.optim.lr_scheduler.LambdaLR(
+                optimizer,
+                linear_warmup_decay(warmup_steps, total_steps, cosine=True),
+            ),
+            "interval": "step",
+            "frequency": 1,
+        }
+
+        return [optimizer], [scheduler]
 
     def nt_xent_loss(self, out_1, out_2, temperature, mode="train"):
+        """
+        assume out_1 and out_2 are normalized
+        out_1: [batch_size, dim]
+        out_2: [batch_size, dim]
+        """
+        # gather representations in case of distributed training
+        # out_1_dist: [batch_size * world_size, dim]
+        # out_2_dist: [batch_size * world_size, dim]
 
         feats = torch.cat([out_1, out_2], dim=0)
         # Calculate cosine similarity
@@ -139,7 +211,7 @@ class SimCLR(LightningModule):
         nll = nll.mean()
 
         # Logging loss
-        self.log(mode + "_loss", nll, on_step=False, on_epoch=True)
+        self.log(mode + "_loss", nll)
         # Get ranking position of positive example
         comb_sim = torch.cat(
             [cos_sim[pos_mask][:, None], cos_sim.masked_fill(pos_mask, -9e15)],  # First position positive example
@@ -147,8 +219,38 @@ class SimCLR(LightningModule):
         )
         sim_argsort = comb_sim.argsort(dim=-1, descending=True).argmin(dim=-1)
         # Logging ranking metrics
-        self.log(mode + "_acc_top1", (sim_argsort == 0).float().mean(), on_step=False, on_epoch=True)
-        self.log(mode + "_acc_top5", (sim_argsort < 5).float().mean(), on_step=False, on_epoch=True)
-        self.log(mode + "_acc_mean_pos", 1 + sim_argsort.float().mean(), on_step=False, on_epoch=True)
+        self.log(mode + "_acc_top1", (sim_argsort == 0).float().mean())
+        self.log(mode + "_acc_top5", (sim_argsort < 5).float().mean())
+        self.log(mode + "_acc_mean_pos", 1 + sim_argsort.float().mean())
 
         return nll
+
+        # if torch.distributed.is_available() and torch.distributed.is_initialized():
+        #     out_1_dist = SyncFunction.apply(out_1)
+        #     out_2_dist = SyncFunction.apply(out_2)
+        # else:
+        #     out_1_dist = out_1
+        #     out_2_dist = out_2
+
+        # # out: [2 * batch_size, dim]
+        # # out_dist: [2 * batch_size * world_size, dim]
+        # out = torch.cat([out_1, out_2], dim=0)
+        # out_dist = torch.cat([out_1_dist, out_2_dist], dim=0)
+
+        # # cov and sim: [2 * batch_size, 2 * batch_size * world_size]
+        # # neg: [2 * batch_size]
+        # cov = torch.mm(out, out_dist.t().contiguous())
+        # sim = torch.exp(cov / temperature)
+        # neg = sim.sum(dim=-1)
+
+        # # from each row, subtract e^(1/temp) to remove similarity measure for x1.x1
+        # row_sub = Tensor(neg.shape).fill_(math.e ** (1 / temperature)).to(neg.device)
+        # neg = torch.clamp(neg - row_sub, min=eps)  # clamp for numerical stability
+
+        # # Positive similarity, pos becomes [2 * batch_size]
+        # pos = torch.exp(torch.sum(out_1 * out_2, dim=-1) / temperature)
+        # pos = torch.cat([pos, pos], dim=0)
+
+        # loss = -torch.log(pos / (neg + eps)).mean()
+
+        # return loss
