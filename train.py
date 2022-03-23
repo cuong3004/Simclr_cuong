@@ -1,3 +1,4 @@
+%%writefile train.py
 import numpy as np
 import pytorch_lightning as pl
 from lit_module import SimCLR
@@ -7,14 +8,24 @@ from pytorch_lightning.loggers import WandbLogger
 from torchvision import transforms
 from callbacks import checkpoint_callback
 import torch
+import os
+import wandb
 
-batch_size = 1536
+batch_size = 512
 input_height = 112
 max_epoch = 50
 
+main_trans = transforms.AutoAugment()
+name_trans = str(main_trans).split("(")[0]
+
+project = "SimCLR"
+name = f"{name_trans}_{batch_size}"
+id = "cuong1"
+
+
 data_transforms = transforms.Compose([
     transforms.RandomResizedCrop(input_height),
-    transforms.RandAugment(),
+    main_trans,
 ])
 
 final_transforms = transforms.Compose([
@@ -43,6 +54,35 @@ dm.val_transforms = sim_val_transforms
 
 test_transform(dm.train_dataloader())
 
+gpus = 1 if torch.cuda.is_available() else 0
+
+wandb_logger = WandbLogger(log_model="all")
+
+if True:
+    
+    run = wandb.init(name=name, project=project, id=id) 
+    model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.batch_size)
+    trainer = pl.Trainer(gpus=gpus, logger=wandb_logger)
+    trainer.fit(model, dm)
+
+else:
+
+    run = wandb.init(name=name, project=project, id=id, resume=True) 
+    
+    # artifact = run.use_artifact('duongcuong1977/Simclr/model-s00ad5y4:v4', type='model')
+    # artifact_dir = artifact.download()
+    path_checkpoint = os.path.join(artifact_dir, "model.ckpt")
+
+    model = SimCLR.load_from_checkpoint(path_checkpoint)
+    trainer = pl.Trainer(gpus=gpus, logger=wandb_logger, callbacks=[checkpoint_callback], resume_from_checkpoint=path_checkpoint)
+    trainer.fit(model, dm)
+    trainer.validate(model, dm)
+
+
+
+
+
+
 # import wandb
 # import os
 # run = wandb.init()
@@ -61,15 +101,15 @@ test_transform(dm.train_dataloader())
 
 # print(len(next(iter(dm.train_dataloader()))))
 
-gpus = 1 if torch.cuda.is_available() else 0
+# gpus = 1 if torch.cuda.is_available() else 0
 
-model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.batch_size)
+# model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.batch_size)
 
 
-# from pytorch_lightning import Trainer
+# # from pytorch_lightning import Trainer
 
-wandb_logger = WandbLogger(name=f"Face_randaugument_batch_{batch_size}", log_model="all", project="Simclr")
-# trainer = Trainer(logger=wandb_logger)
+# wandb_logger = WandbLogger(name=f"Face_randaugument_batch_{batch_size}", log_model="all", project="Simclr")
+# # trainer = Trainer(logger=wandb_logger)
 
-trainer = pl.Trainer(gpus=gpus, logger=wandb_logger)
-trainer.fit(model, dm)
+# trainer = pl.Trainer(gpus=gpus, logger=wandb_logger)
+# trainer.fit(model, dm)
