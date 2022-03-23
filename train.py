@@ -1,4 +1,3 @@
-%%writefile train.py
 import numpy as np
 import pytorch_lightning as pl
 from lit_module import SimCLR
@@ -40,15 +39,10 @@ sim_transforms = transforms.Compose([
         final_transforms
 ])
 # val_transforms = transforms.Compose
-sim_train_transforms = SimCLRTrainDataTransform(batch_size)
-sim_val_transforms = SimCLREvalDataTransform(batch_size)
+sim_train_transforms = SimCLRTrainDataTransform(sim_transforms)
+sim_val_transforms = SimCLRTrainDataTransform(sim_transforms)
 
-sim_train_transforms.train_transform = sim_transforms
-sim_val_transforms.train_transform = sim_transforms
-
-
-
-dm = CelebADataModule("data/CelebA/img_align_celeba", num_workers=2)
+dm = CelebADataModule("data/CelebA/img_align_celeba", num_workers=2,batch_size=batch_size)
 dm.train_transforms = sim_train_transforms
 dm.val_transforms = sim_val_transforms
 
@@ -61,7 +55,7 @@ wandb_logger = WandbLogger(log_model="all")
 if True:
     
     run = wandb.init(name=name, project=project, id=id) 
-    model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.batch_size)
+    model = SimCLR(num_samples=dm.num_samples, batch_size=dm.batch_size, max_epochs=max_epoch)
     trainer = pl.Trainer(gpus=gpus, logger=wandb_logger)
     trainer.fit(model, dm)
 
