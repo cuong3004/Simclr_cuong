@@ -5,7 +5,7 @@ from typing import List, Tuple, Optional, Dict
 import torch
 from torch import Tensor
 
-import functional as F
+import rand_trans.functional as F
 
 class InterpolationMode(Enum):
     """Interpolation modes

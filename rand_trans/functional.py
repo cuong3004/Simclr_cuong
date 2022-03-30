@@ -15,8 +15,8 @@ except ImportError:
     accimage = None
 
 
-import functional_pil as F_pil
-import functional_tensor as F_t
+import rand_trans.functional_pil as F_pil
+import rand_trans.functional_tensor as F_t
 
 import math
 import pathlib
@@ -1091,11 +1091,11 @@ def rotate(
     if center is not None and not isinstance(center, (list, tuple)):
         raise TypeError("Argument center should be a sequence")
 
-    if not isinstance(interpolation, InterpolationMode):
-        raise TypeError("Argument interpolation should be a InterpolationMode")
+    # if not isinstance(interpolation, InterpolationMode):
+    #     raise TypeError("Argument interpolation should be a InterpolationMode")
 
     if not isinstance(img, torch.Tensor):
-        pil_interpolation = pil_modes_mapping[interpolation]
+        pil_interpolation = pil_modes_mapping[InterpolationMode.NEAREST]
         return F_pil.rotate(img, angle=angle, interpolation=pil_interpolation, expand=expand, center=center, fill=fill)
 
     center_f = [0.0, 0.0]
@@ -1196,8 +1196,8 @@ def affine(
     if not isinstance(shear, (numbers.Number, (list, tuple))):
         raise TypeError("Shear should be either a single value or a sequence of two values")
 
-    if not isinstance(interpolation, InterpolationMode):
-        raise TypeError("Argument interpolation should be a InterpolationMode")
+    # if not isinstance(interpolation, InterpolationMode):
+    #     raise TypeError("Argument interpolation should be a InterpolationMode")
 
     if isinstance(angle, int):
         angle = float(angle)
@@ -1228,7 +1228,7 @@ def affine(
         if center is None:
             center = [width * 0.5, height * 0.5]
         matrix = _get_inverse_affine_matrix(center, angle, translate, scale, shear)
-        pil_interpolation = pil_modes_mapping[interpolation]
+        pil_interpolation = pil_modes_mapping[InterpolationMode.NEAREST]
         return F_pil.affine(img, matrix=matrix, interpolation=pil_interpolation, fill=fill)
 
     center_f = [0.0, 0.0]
