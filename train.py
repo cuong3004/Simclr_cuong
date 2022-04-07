@@ -10,7 +10,7 @@ import torch
 import os
 import wandb
 
-batch_size = 512
+batch_size = 256
 input_height = 112
 max_epoch = 50
 
@@ -19,7 +19,7 @@ name_trans = str(main_trans).split("(")[0]
 
 project = "SimCLR"
 name = f"{name_trans}_{batch_size}"
-id = "cuong1"
+
 
 
 data_transforms = transforms.Compose([
@@ -66,49 +66,9 @@ if True:
 
 else:
 
-    run = wandb.init(name=name, project=project, id=id, resume=True) 
-    
-    # artifact = run.use_artifact('duongcuong1977/Simclr/model-s00ad5y4:v4', type='model')
-    # artifact_dir = artifact.download()
-    path_checkpoint = os.path.join(artifact_dir, "model.ckpt")
-
     model = SimCLR.load_from_checkpoint(path_checkpoint)
     trainer = pl.Trainer(gpus=gpus, logger=wandb_logger, callbacks=[checkpoint_callback], resume_from_checkpoint=path_checkpoint)
     trainer.fit(model, dm)
     trainer.validate(model, dm)
 
 
-
-
-
-
-# import wandb
-# import os
-# run = wandb.init()
-# artifact = run.use_artifact('duongcuong1977/Simclr/model-s00ad5y4:v4', type='model')
-# artifact_dir = artifact.download()
-
-# model = SimCLR.load_from_checkpoint(os.path.join("./artifacts/model-s00ad5y4:v4", "model.ckpt"))
-
-# gpus = 1 if torch.cuda.is_available() else 0
-# wandb_logger = WandbLogger(name="Face_randaugument_batch_512_t_0.1", log_model="all", project="Simclr", id="s00ad5y4")
-# trainer = pl.Trainer(gpus=gpus, logger=wandb_logger, callbacks=[checkpoint_callback], resume_from_checkpoint=os.path.join("./artifacts/model-s00ad5y4:v4", "model.ckpt"), max_epochs=max_epoch)
-# trainer.fit(model, dm)
-# trainer.validate(model, dm)
-# def test_transform(dataset, wandb_logger):
-    
-
-# print(len(next(iter(dm.train_dataloader()))))
-
-# gpus = 1 if torch.cuda.is_available() else 0
-
-# model = SimCLR(gpus=gpus, dataset="", num_samples=dm.num_samples, batch_size=dm.batch_size)
-
-
-# # from pytorch_lightning import Trainer
-
-# wandb_logger = WandbLogger(name=f"Face_randaugument_batch_{batch_size}", log_model="all", project="Simclr")
-# # trainer = Trainer(logger=wandb_logger)
-
-# trainer = pl.Trainer(gpus=gpus, logger=wandb_logger)
-# trainer.fit(model, dm)
